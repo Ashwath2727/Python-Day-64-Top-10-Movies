@@ -14,6 +14,7 @@ import requests
 from extensions import db
 from models.movies import Movie
 from movie_edit_form import MovieEditForm
+from models.movie_queries import MovieQueries
 
 '''
 Red underlines? Install the required packages first: 
@@ -43,16 +44,12 @@ app.config["SQLALCHEMY_ECHO"] = True
 
 db.init_app(app)
 
+movie_queries = MovieQueries()
+
 
 @app.route("/")
 def home():
-    global all_movies
-    try:
-        print("==================> Getting all movies")
-        all_movies = Movie.query.order_by(Movie.ranking.desc()).all()
-        print(all_movies)
-    except Exception as e:
-        print(f"Error Getting records = {e}")
+    all_movies = movie_queries.get_all_movies()
     return render_template("index.html", movies=all_movies)
 
 
@@ -66,11 +63,7 @@ def edit_movie():
         movie_id = request.args.get("id")
         print(f"===========> POST request, movie_id = {movie_id}")
 
-        try:
-            movie_to_edit = Movie.query.filter_by(id=movie_id).all()[0]
-            print(f"movie_to_edit = {movie_to_edit}")
-        except Exception as e:
-            print(f"Error Getting records = {e}")
+        movie_to_edit = movie_queries.get_movie_by_id(movie_id)
 
         if form.validate_on_submit():
             new_rating = form.rating.data
@@ -91,6 +84,26 @@ def edit_movie():
             return redirect(url_for("home"))
 
     return render_template("edit.html", form=form)
+
+
+@app.route("/delete")
+def delete_movie():
+
+    id = request.args.get("id")
+    print(f"===========> DELETE request, id = {id}")
+
+    movie_to_delete = movie_queries.get_movie_by_id(id)
+
+    try:
+        db.session.delete(movie_to_delete)
+        db.session.commit()
+
+        print(f"{movie_to_delete} has been deleted")
+    except Exception as e:
+        print(f"=================> Error while deleting movie = {e}")
+
+    return redirect(url_for("home"))
+
 
 
 if __name__ == '__main__':

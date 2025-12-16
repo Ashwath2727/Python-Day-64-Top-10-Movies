@@ -13,6 +13,7 @@ import requests
 
 from extensions import db
 from models.movies import Movie
+from movie_edit_form import MovieEditForm
 
 '''
 Red underlines? Install the required packages first: 
@@ -48,11 +49,48 @@ def home():
     global all_movies
     try:
         print("==================> Getting all movies")
-        all_movies = Movie.query.all()
+        all_movies = Movie.query.order_by(Movie.ranking.desc()).all()
         print(all_movies)
     except Exception as e:
         print(f"Error Getting records = {e}")
     return render_template("index.html", movies=all_movies)
+
+
+@app.route("/edit", methods=["GET", "POST"])
+def edit_movie():
+
+    global movie_to_edit
+    form = MovieEditForm()
+
+    if request.method == "POST":
+        movie_id = request.args.get("id")
+        print(f"===========> POST request, movie_id = {movie_id}")
+
+        try:
+            movie_to_edit = Movie.query.filter_by(id=movie_id).all()[0]
+            print(f"movie_to_edit = {movie_to_edit}")
+        except Exception as e:
+            print(f"Error Getting records = {e}")
+
+        if form.validate_on_submit():
+            new_rating = form.rating.data
+            new_review = form.review.data
+
+            print(new_rating, new_review)
+
+            try:
+                movie_to_edit.rating = new_rating
+                movie_to_edit.review = new_review
+
+                db.session.add(movie_to_edit)
+                db.session.commit()
+
+            except Exception as e:
+                print(f"Error while editing the rating and review of movie = {e}")
+
+            return redirect(url_for("home"))
+
+    return render_template("edit.html", form=form)
 
 
 if __name__ == '__main__':

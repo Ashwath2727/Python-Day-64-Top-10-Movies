@@ -1,20 +1,23 @@
+import os
+import time
 from urllib.parse import quote
 
+import requests
 import sqlalchemy
 from flask import Flask, render_template, redirect, url_for, request
 from flask_bootstrap import Bootstrap5
-from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import Integer, String, Float
-from flask_wtf import FlaskForm
-from wtforms import StringField, SubmitField
-from wtforms.validators import DataRequired
-import requests
+from movie_add_form import AddMovieForm
 
 from extensions import db
 from models.movies import Movie
 from movie_edit_form import MovieEditForm
 from models.movie_queries import MovieQueries
+from pathlib import Path
+from dotenv import load_dotenv
+
+
+env_path = Path('.') / '.env'
+load_dotenv(dotenv_path=env_path)
 
 '''
 Red underlines? Install the required packages first: 
@@ -41,6 +44,14 @@ DB_HOST = "localhost"
 SQLALCHEMY_DB_URI = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:5432/{DB_NAME}"
 app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DB_URI
 app.config["SQLALCHEMY_ECHO"] = True
+
+MOVIE_DB_API_KEY= os.getenv("MOVIE_DB_API_KEY")
+MOVIE_DB_URL=os.getenv("MOVIE_DB_URL")
+MOVIE_DB_ACCESS_TOKEN=os.getenv("MOVIE_DB_ACCESS_TOKEN")
+MOVIE_DB_IMAGE_URL = "https://image.tmdb.org/t/p/w500"
+MOVIE_DB_INFO_URL = "https://api.themoviedb.org/3/movie"
+
+RATE_LIMIT_SECONDS = 30
 
 db.init_app(app)
 
@@ -104,6 +115,100 @@ def delete_movie():
 
     return redirect(url_for("home"))
 
+@app.route("/add", methods=["GET", "POST"])
+def add_movie():
+    global data
+    add_movie_form = AddMovieForm()
+
+    # if request.method == "POST":
+    if add_movie_form.validate_on_submit():
+        print(f"new movie title = {add_movie_form.title.data}")
+
+        movie_title = add_movie_form.title.data
+
+        try:
+            print(f"Finding movie info from the API => {MOVIE_DB_URL}")
+            params = {
+                "query": movie_title,
+                "language": "en-US",
+                "include_adult": "false",
+                "page": 1,
+                "api_key": MOVIE_DB_API_KEY,
+            }
+
+            headers = {
+                "accept": "application/json",
+                "Authorization": f"Bearer {MOVIE_DB_ACCESS_TOKEN}",
+            }
+
+            print(f"data received from api")
+            time.sleep(RATE_LIMIT_SECONDS)
+            response = requests.get(MOVIE_DB_URL, params=params, headers=headers)
+            # time.sleep(RATE_LIMIT_SECONDS)
+            print("waiting for data to be received")
+
+
+            print(response.json())
+
+            data = response.json()["results"]
+            print(f"data = {data}")
+
+
+        except Exception as e:
+            print(f"================> Error while fetching movies from api = {e}")
+
+        return render_template("select.html", options=data)
+
+    return render_template("add.html", add_movie_form=add_movie_form)
+
+
+@app.route("/find")
+def find_movie():
+    global new_movie
+    movie_api_id = request.args.get("id")
+
+    if movie_api_id:
+        try:
+            print(f"finding the movie with id = {movie_api_id}")
+            time.sleep(RATE_LIMIT_SECONDS)
+
+            movie_api_url = f"{MOVIE_DB_INFO_URL}/{movie_api_id}"
+            params = {
+                "api_key": MOVIE_DB_API_KEY,
+            }
+            response = requests.get(movie_api_url, params=params)
+
+            # time.sleep(RATE_LIMIT_SECONDS)
+
+            selected_movie = response.json()
+
+            try:
+                print(f"adding the movie to the database = {selected_movie}")
+
+                new_movie = Movie(
+                    title=selected_movie["title"],
+                    year=selected_movie["release_date"].split("-")[0],
+                    description=selected_movie["overview"],
+                    img_url=f"{MOVIE_DB_IMAGE_URL}{selected_movie['poster_path']}",
+                    rating=0,
+                    ranking=0,
+                    review=""
+                )
+
+                db.session.add(new_movie)
+                db.session.commit()
+
+                print(f"{new_movie} has been added to the database")
+
+            except Exception as e:
+                print(f"Error while adding movie into database = {e}")
+
+            return redirect(url_for("edit_movie", id=new_movie.id))
+
+        except Exception as e:
+            print(f"Error while getting the movie from the api = {e}")
+
+    return None
 
 
 if __name__ == '__main__':

@@ -7,7 +7,7 @@ class MovieQueries:
         global all_movies
         try:
             print("==================> Getting all movies")
-            all_movies = Movie.query.order_by(Movie.ranking.desc()).all()
+            all_movies = Movie.query.order_by(Movie.rating).all()
             print(all_movies)
         except Exception as e:
             print(f"Error Getting records = {e}")

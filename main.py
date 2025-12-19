@@ -61,6 +61,11 @@ movie_queries = MovieQueries()
 @app.route("/")
 def home():
     all_movies = movie_queries.get_all_movies()
+
+    for i in range(len(all_movies)):
+        all_movies[i].ranking = len(all_movies) - i
+
+    db.session.commit()
     return render_template("index.html", movies=all_movies)
 
 
